@@ -1,42 +1,29 @@
-# Required to connect to your outgoing mail server. Example for using gmail:
-# gmail
-SMTP_SERVER: smtp.gmail.com
-SMTP_PORT: 587
-USERNAME: you@gmail.com
-PASSWORD: "you're-password"
-
-TIMEZONE: 'US/Pacific'
-
 PARTICIPANTS:
-  - Chad <chad@somewhere.net>
-  - Jen <jen@gmail.net>
-  - Bill <Bill@somedomain.net>
-  - Sharon <Sharon@hi.org>
+  - name: 'Chad'
+    phone: '+15555555555'
+    dont_pair:
+      - 'Jen'      # Spouse
+      - 'Bill'     # Bestie
+  - name: 'Jen'
+    phone: '+15555555556'
+    dont_pair:
+      - 'Chad'     # Spouse
+  - name: Bill
+    phone: '+15555555557'
+    dont_pair:
+      - 'Sharon'   # Spouse
+      - 'Chad'     # Bestie
+  - name: Sharon
+    phone: '+15555555558'
+    dont_pair:
+      - 'Bill'     # Spouse
 
-
-# Warning -- if you mess this up you could get an infinite loop
-DONT-PAIR:
-  - Chad, Jen    # Chad and Jen are married
-  - Chad, Bill   # Chad and Bill are best friends
-  - Bill, Sharon
-
-# From address should be the organizer in case participants have any questions
-FROM: You <you@gmail.net>
-
-# Both SUBJECT and MESSAGE can include variable substitution for the 
-# "santa" and "santee"
-SUBJECT: Your secret santa recipient is {santee}
-MESSAGE: 
+# MESSAGE can include variable substitution for the "santa" and "santee"
+MESSAGE:
   Dear {santa},
-  
+
   This year you are {santee}'s Secret Santa!. Ho Ho Ho!
-  
+
   The maximum spending limit is 50.00
-  
-  
-  This message was automagically generated from a computer. 
-  
-  Nothing could possibly go wrong...
-  
-  http://github.com/underbluewaters/secret-santa
-  
+
+  https://github.com/ndewing/secret-santa
