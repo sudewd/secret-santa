@@ -1,7 +1,7 @@
 Intro
 =====
 
-** TODO ** Update of README needed.
+** TODO ** Update of README needed. Most documentation below is outdated.
 
 **secret-santa** can help you manage a list of secret santa participants by
 randomly assigning pairings and sending emails. It can avoid pairing
