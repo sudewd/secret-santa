@@ -1,10 +1,12 @@
-import yaml
 import argparse
 import random
+import boto3
 import time
 import sys
-import boto3
+import yaml
+import logging
 
+logger = logging.getLogger(__name__)
 
 def parse_args():
     '''Command Line Arguments for Program'''
@@ -36,29 +38,8 @@ def parse_args():
     args = vars(parser.parse_args())
     return args
 
-
-class Person:
-    def __init__(self, name, phone, invalid_matches):
-        self.name = name
-        self.phone = phone
-        self.invalid_matches = invalid_matches
-
-    def __str__(self):
-        return "%s <%s>" % (self.name, self.email)
-
-
-class Pair:
-    def __init__(self, giver, reciever):
-        self.giver = giver
-        self.reciever = reciever
-
-    def __str__(self):
-        return "%s ---> %s" % (self.giver.name, self.reciever.name)
-
-
 def parse_yaml(yaml_path):
-    return yaml.load(open(yaml_path))
-
+    return yaml.safe_load(open(yaml_path))
 
 def verify_config(config):
     required = (
@@ -68,40 +49,77 @@ def verify_config(config):
     for key in required:
         if key not in config.keys():
             raise Exception(
-                'Required parameter %s not in yaml config file!' % (key,))
+                'Required parameter {key} not in yaml config file!')
 
     if len(config['PARTICIPANTS']) < 2:
         raise Exception('Not enough participants found in config.')
 
 
-def choose_reciever(giver, recievers):
-    choice = random.choice(recievers)
-    if choice.name in giver.invalid_matches or giver.name == choice.name:
-        if len(recievers) is 1:
+class Person:
+    def __init__(self, name, phone, invalid_matches):
+        self.name = name
+        self.phone = phone
+        self.invalid_matches = invalid_matches
+        self.category = ''
+
+    def __str__(self):
+        return "{} <{}> - {}".format(self.name, self.phone, self.category)
+
+def get_category(giver, categories):
+    category = random.choice(categories)
+    if category in giver.invalid_matches:
+        if len(categories) == 1:
             raise Exception('Only one reciever left, try again')
-        return choose_reciever(giver, recievers)
+        return get_category(giver, categories)
     else:
-        return choice
+        return category
 
-
-def create_pairs(g, r):
+def create_pairs(g, c):
     givers = g[:]
-    recievers = r[:]
+    categories = c[:]
     pairs = []
     for giver in givers:
-        try:
-            reciever = choose_reciever(giver, recievers)
-            recievers.remove(reciever)
-            pairs.append(Pair(giver, reciever))
+        try: 
+            giver.category = get_category(giver, categories)
+            categories.remove(giver.category)
+            pairs.append(giver)
         except:
-            return create_pairs(g, r)
+            return create_pairs(g, c)
     return pairs
-
 
 class Usage(Exception):
     def __init__(self, msg):
         self.msg = msg
 
+class SnsWrapper:
+    """Encapsulates Amazon SNS topic and subscription functions."""
+    def __init__(self, sns_resource):
+        """
+        :param sns_resource: A Boto3 Amazon SNS resource.
+        """
+        self.sns_resource = sns_resource
+
+    def publish_text_message(self, phone_number, message):
+        """
+        Publishes a text message directly to a phone number without need for a
+        subscription.
+
+        :param phone_number: The phone number that receives the message. This must be
+                             in E.164 format. For example, a United States phone
+                             number might be +12065550101.
+        :param message: The message to send.
+        :return: The ID of the message.
+        """
+        try:
+            response = self.sns_resource.meta.client.publish(
+                PhoneNumber=phone_number, Message=message)
+            message_id = response['MessageId']
+            logger.info("Published message to %s.", phone_number)
+        except ClientError:
+            logger.exception("Couldn't publish message to %s.", phone_number)
+            raise
+        else:
+            return message_id
 
 def main(argv=None):
     args = parse_args()
@@ -115,40 +133,31 @@ def main(argv=None):
     givers = []
     for person in participants:
         person = Person(person['name'], person['phone'], person['dont_pair'])
-        # givers.append(person)
+        givers.append(person)
 
     # recievers = givers[:]
     pairs = create_pairs(givers, categories)
     if not send:
-        print """
+        print("""
 Test pairings:
 
-%s
+{}
 
 To send out emails with new pairings,
 call with the --send argument:
 
     $ python secret_santa.py --send
-
-            """ % ("\n".join([str(p) for p in pairs]))
+            """.format("\n".join([str(p) for p in pairs])))
 
     if send:
-        session = boto3.session.Session(
-            profile_name=args['aws_profile'],
-            region_name=args['aws_region']
-            )
-        client_sns = session.client('sns')
-    for pair in pairs:
+        sns_wrapper = SnsWrapper(boto3.resource('sns'))
+    for p in pairs:
         body = (config['MESSAGE']).format(
-                santa=pair.giver.name,
-                santee=pair.reciever.name,
+                p.name, p.category
                 )
         if send:
-            response = client_sns.publish(
-                PhoneNumber=pair.giver.phone,
-                Message=body
-            )
-            print("SMS messaged %s <%s>" ).format(pair.giver.name, pair.giver.phone)
+            sns_wrapper.publish_text_message(p.phone, body)
+            print("SMS messaged {} {} - something {}".format(p.name, p.phone, p.category))
             time.sleep(1)
 
 
